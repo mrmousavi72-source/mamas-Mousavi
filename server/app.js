@@ -16,7 +16,7 @@ function createApp(db, { allowSimulation = false, tilesPath = null } = {}) {
   app.use(express.static(publicDir));
   app.use('/vendor/maplibre', express.static(path.join(modules, 'maplibre-gl', 'dist')));
   app.use('/vendor/pmtiles', express.static(path.join(modules, 'pmtiles', 'dist')));
-  app.use('/vendor/rtl-text', express.static(path.join(modules, '@mapbox', 'mapbox-gl-rtl-text')));
+  app.use('/vendor/rtl-text', express.static(path.join(modules, '@mapbox', 'mapbox-gl-rtl-text', 'dist')));
   app.use('/vendor/vazirmatn', express.static(path.join(modules, 'vazirmatn')));
 
   app.get('/map/style.json', (req, res) => res.json(mapStyle(tilesPath)));
