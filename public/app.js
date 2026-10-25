@@ -1,6 +1,7 @@
 'use strict';
 
-const TEHRAN = [35.6892, 51.389];
+const TEHRAN = [51.389, 35.6892]; // [lng, lat]
+const IRAN_BOUNDS = [[42, 23.5], [65, 41.5]];
 const MAX_ACCURACY_METERS = 50;
 const MIN_STEP_METERS = 3;
 const TRACK_KEY = 'ghalamro.track';
@@ -35,6 +36,15 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+// Great-circle distance in meters between two { lat, lng } points.
+function distance(a, b) {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLng = (b.lng - a.lng) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
 async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
@@ -57,54 +67,133 @@ function toast(message, { error = false, duration = 5000 } = {}) {
 
 // ---------- Map ----------
 
-const map = L.map('map', { zoomControl: false }).setView(TEHRAN, 13);
-L.control.zoom({ position: 'topleft' }).addTo(map);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '&copy; مشارکت‌کنندگان <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-}).addTo(map);
+const pmtilesProtocol = new pmtiles.Protocol();
+maplibregl.addProtocol('pmtiles', pmtilesProtocol.tile);
+// Shapes Persian/Arabic labels and lays them out right-to-left.
+maplibregl.setRTLTextPlugin('/vendor/rtl-text/mapbox-gl-rtl-text.js', true);
 
-const territoryLayer = L.geoJSON(null, {
-  style: (f) => ({
-    color: f.properties.color,
-    fillColor: f.properties.color,
-    weight: f.properties.userId === state.user?.id ? 3 : 1.5,
-    fillOpacity: f.properties.userId === state.user?.id ? 0.4 : 0.25,
-  }),
-  onEachFeature: (f, layer) =>
-    layer.bindPopup(
-      `<strong>${escapeHtml(f.properties.username)}</strong><br>${formatArea(f.properties.area)}`,
-    ),
-}).addTo(map);
-
-const trackLine = L.polyline([], { color: '#f97316', weight: 5 }).addTo(map);
-let startCircle = null;
+const EMPTY = { type: 'FeatureCollection', features: [] };
+let map;
+let mapReady;
 let meMarker = null;
+
+async function loadStyle() {
+  const res = await fetch('/map/style.json');
+  // Asset URLs in the style are relative to this server.
+  return JSON.parse((await res.text()).replaceAll('{origin}', location.origin));
+}
+
+function createMap(style) {
+  map = new maplibregl.Map({
+    container: 'map',
+    style,
+    center: TEHRAN,
+    zoom: 13,
+    maxBounds: IRAN_BOUNDS,
+    attributionControl: { compact: true },
+  });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
+
+  mapReady = new Promise((resolve) =>
+    map.on('load', () => {
+      map.addSource('territories', { type: 'geojson', data: EMPTY });
+      map.addLayer({
+        id: 'territory-fill',
+        type: 'fill',
+        source: 'territories',
+        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.25 },
+      });
+      map.addLayer({
+        id: 'territory-line',
+        type: 'line',
+        source: 'territories',
+        paint: { 'line-color': ['get', 'color'], 'line-width': 1.5 },
+      });
+      map.addSource('start-zone', { type: 'geojson', data: EMPTY });
+      map.addLayer({
+        id: 'start-zone',
+        type: 'line',
+        source: 'start-zone',
+        paint: { 'line-color': '#16a34a', 'line-width': 2, 'line-dasharray': [3, 3] },
+      });
+      map.addSource('track', { type: 'geojson', data: EMPTY });
+      map.addLayer({
+        id: 'track',
+        type: 'line',
+        source: 'track',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#f97316', 'line-width': 5 },
+      });
+      highlightOwnTerritory();
+      resolve();
+    }),
+  );
+
+  map.on('click', 'territory-fill', (e) => {
+    if (state.recording) return;
+    const p = e.features[0].properties;
+    new maplibregl.Popup()
+      .setLngLat(e.lngLat)
+      .setHTML(`<strong>${escapeHtml(p.username)}</strong><br>${formatArea(p.area)}`)
+      .addTo(map);
+  });
+  map.on('click', onSimClick);
+  map.on('moveend', loadTerritories);
+}
+
+// Make the signed-in player's land stand out.
+function highlightOwnTerritory() {
+  if (!map?.getLayer('territory-fill')) return;
+  const mine = ['==', ['get', 'userId'], state.user?.id ?? -1];
+  map.setPaintProperty('territory-fill', 'fill-opacity', ['case', mine, 0.4, 0.25]);
+  map.setPaintProperty('territory-line', 'line-width', ['case', mine, 3, 1.5]);
+}
 
 let loadTimer;
 function loadTerritories() {
   clearTimeout(loadTimer);
   loadTimer = setTimeout(async () => {
+    if (!map) return;
+    await mapReady;
     const b = map.getBounds();
     const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',');
     try {
-      const data = await api(`/api/territories?mode=${state.mode}&bbox=${bbox}`);
-      territoryLayer.clearLayers();
-      territoryLayer.addData(data);
+      map.getSource('territories').setData(await api(`/api/territories?mode=${state.mode}&bbox=${bbox}`));
     } catch (err) {
       toast(err.message, { error: true });
     }
   }, 250);
 }
-map.on('moveend', loadTerritories);
 
-function showMe(latlng) {
+function circlePolygon(center, radiusMeters, steps = 64) {
+  const ring = [];
+  const dLat = radiusMeters / 111_320;
+  const dLng = dLat / Math.cos((center.lat * Math.PI) / 180);
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * 2 * Math.PI;
+    ring.push([center.lng + dLng * Math.cos(a), center.lat + dLat * Math.sin(a)]);
+  }
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} };
+}
+
+function drawTrack(points) {
+  map.getSource('track')?.setData({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: points.map((p) => [p.lng, p.lat]) },
+    properties: {},
+  });
+  map.getSource('start-zone')?.setData(
+    points.length ? circlePolygon(points[0], state.config.rules.closeDistanceMeters) : EMPTY,
+  );
+}
+
+function showMe(lngLat) {
   if (!meMarker) {
-    meMarker = L.circleMarker(latlng, {
-      radius: 8, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1,
-    }).addTo(map);
+    const el = document.createElement('div');
+    el.className = 'me-marker';
+    meMarker = new maplibregl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
   } else {
-    meMarker.setLatLng(latlng);
+    meMarker.setLngLat(lngLat);
   }
 }
 
@@ -112,9 +201,9 @@ $('locate-btn').addEventListener('click', () => {
   if (!navigator.geolocation) return toast('مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند.', { error: true });
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      const latlng = [pos.coords.latitude, pos.coords.longitude];
-      showMe(latlng);
-      map.setView(latlng, 16);
+      const lngLat = [pos.coords.longitude, pos.coords.latitude];
+      showMe(lngLat);
+      map.flyTo({ center: lngLat, zoom: 16 });
     },
     () => toast('دسترسی به موقعیت مکانی داده نشد.', { error: true }),
     { enableHighAccuracy: true, timeout: 15000 },
@@ -130,27 +219,23 @@ function setRecordingUi(active) {
   $('live-stats').hidden = !active;
   $('sim-btn').hidden = active;
   $('sim-hint').hidden = !(active && state.recording?.simulated);
-  // Territories must not capture taps (popups) while a route is being drawn.
-  map.getContainer().classList.toggle('recording', active);
-  if (active) map.closePopup();
   document.querySelectorAll('.mode-toggle button').forEach((b) => (b.disabled = active));
+  if (active) document.querySelectorAll('.maplibregl-popup').forEach((p) => p.remove());
 }
 
 function updateLiveStats() {
   const rec = state.recording;
   if (!rec) return;
   const pts = rec.points;
-  let distance = 0;
-  for (let i = 1; i < pts.length; i++) {
-    distance += L.latLng(pts[i - 1].lat, pts[i - 1].lng).distanceTo(L.latLng(pts[i].lat, pts[i].lng));
-  }
-  $('stat-distance').textContent = fa(distance / 1000, 2);
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += distance(pts[i - 1], pts[i]);
+  $('stat-distance').textContent = fa(total / 1000, 2);
   const elapsed = pts.length ? (rec.simulated ? pts.at(-1).t - pts[0].t : Date.now() - pts[0].t) : 0;
   $('stat-time').textContent = formatDuration(elapsed);
 
   const gapEl = $('stat-gap');
   if (pts.length > 1) {
-    const gap = L.latLng(pts[0].lat, pts[0].lng).distanceTo(L.latLng(pts.at(-1).lat, pts.at(-1).lng));
+    const gap = distance(pts[0], pts.at(-1));
     gapEl.textContent = `${fa(gap)} م`;
     gapEl.classList.toggle('ok', gap <= state.config.rules.closeDistanceMeters && pts.length > 3);
   } else {
@@ -161,17 +246,9 @@ function updateLiveStats() {
 function addPoint(point) {
   const rec = state.recording;
   const last = rec.points.at(-1);
-  if (last && L.latLng(last.lat, last.lng).distanceTo(L.latLng(point.lat, point.lng)) < MIN_STEP_METERS) {
-    return;
-  }
+  if (last && distance(last, point) < MIN_STEP_METERS) return;
   rec.points.push(point);
-  trackLine.addLatLng([point.lat, point.lng]);
-  if (rec.points.length === 1) {
-    startCircle = L.circle([point.lat, point.lng], {
-      radius: state.config.rules.closeDistanceMeters,
-      color: '#16a34a', weight: 2, dashArray: '6 6', fillOpacity: 0.08,
-    }).addTo(map);
-  }
+  drawTrack(rec.points);
   if (!rec.simulated) {
     localStorage.setItem(TRACK_KEY, JSON.stringify({ mode: state.mode, points: rec.points }));
   }
@@ -189,13 +266,9 @@ async function requestWakeLock() {
 function startRecording({ simulated = false, resume = null } = {}) {
   if (!state.user) return openAuth();
   state.recording = { points: [], watchId: null, timer: null, simulated };
-  trackLine.setLatLngs([]);
+  drawTrack([]);
   setRecordingUi(true);
-
-  if (simulated) {
-    map.on('click', onSimClick);
-    return;
-  }
+  if (simulated) return;
 
   if (!navigator.geolocation) {
     stopRecording();
@@ -204,11 +277,11 @@ function startRecording({ simulated = false, resume = null } = {}) {
   resume?.forEach(addPoint);
   state.recording.watchId = navigator.geolocation.watchPosition(
     (pos) => {
-      const latlng = [pos.coords.latitude, pos.coords.longitude];
-      showMe(latlng);
+      const lngLat = [pos.coords.longitude, pos.coords.latitude];
+      showMe(lngLat);
       if (pos.coords.accuracy > MAX_ACCURACY_METERS) return;
-      if (state.recording.points.length === 0) map.setView(latlng, 16);
-      addPoint({ lat: latlng[0], lng: latlng[1], t: pos.timestamp });
+      if (state.recording.points.length === 0) map.flyTo({ center: lngLat, zoom: 16 });
+      addPoint({ lat: lngLat[1], lng: lngLat[0], t: pos.timestamp });
     },
     () => toast('دسترسی به موقعیت مکانی داده نشد.', { error: true }),
     { enableHighAccuracy: true, maximumAge: 0 },
@@ -219,28 +292,22 @@ function startRecording({ simulated = false, resume = null } = {}) {
 
 // Simulated track: each click is a point reached at a jogging pace.
 function onSimClick(e) {
+  if (!state.recording?.simulated) return;
   const pts = state.recording.points;
-  let t = Date.now();
-  if (pts.length) {
-    const last = pts.at(-1);
-    const meters = L.latLng(last.lat, last.lng).distanceTo(e.latlng);
-    t = last.t + (meters / (state.mode === 'run' ? 3 : 7)) * 1000;
-  }
-  addPoint({ lat: e.latlng.lat, lng: e.latlng.lng, t });
+  const point = { lat: e.lngLat.lat, lng: e.lngLat.lng, t: Date.now() };
+  if (pts.length) point.t = pts.at(-1).t + (distance(pts.at(-1), point) / (state.mode === 'run' ? 3 : 7)) * 1000;
+  addPoint(point);
 }
 
 function stopRecording() {
   const rec = state.recording;
   if (rec?.watchId != null) navigator.geolocation.clearWatch(rec.watchId);
   if (rec?.timer) clearInterval(rec.timer);
-  map.off('click', onSimClick);
   state.wakeLock?.release().catch(() => {});
   state.wakeLock = null;
   state.recording = null;
   localStorage.removeItem(TRACK_KEY);
-  trackLine.setLatLngs([]);
-  startCircle?.remove();
-  startCircle = null;
+  drawTrack([]);
   setRecordingUi(false);
 }
 
@@ -251,8 +318,7 @@ async function finishRecording() {
   if (rec.simulated && points.length > 2) {
     const first = points[0];
     const last = points.at(-1);
-    const meters = L.latLng(last.lat, last.lng).distanceTo(L.latLng(first.lat, first.lng));
-    points.push({ lat: first.lat, lng: first.lng, t: last.t + (meters / 3) * 1000 });
+    points.push({ lat: first.lat, lng: first.lng, t: last.t + (distance(last, first) / 3) * 1000 });
   }
 
   $('finish-btn').disabled = true;
@@ -299,7 +365,7 @@ document.querySelectorAll('.tabbar button').forEach((btn) =>
     const view = btn.dataset.view;
     document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b === btn));
     document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
-    if (view === 'map') map.invalidateSize();
+    if (view === 'map') map?.resize();
     if (view === 'leaders') loadLeaders();
     if (view === 'profile') loadProfile();
   }),
@@ -388,6 +454,7 @@ function setSession(token, user) {
     localStorage.removeItem('ghalamro.user');
   }
   $('account-btn').textContent = user ? user.username : 'ورود';
+  highlightOwnTerritory();
   loadTerritories();
 }
 
@@ -432,6 +499,7 @@ $('auth-form').addEventListener('submit', async (e) => {
 // ---------- Startup ----------
 
 async function init() {
+  createMap(await loadStyle());
   setSession(state.token, state.user);
   try {
     state.config = await api('/api/config');
@@ -447,6 +515,7 @@ async function init() {
     document.querySelectorAll('.mode-toggle button').forEach((b) =>
       b.classList.toggle('active', b.dataset.mode === saved.mode),
     );
+    await mapReady;
     startRecording({ resume: saved.points });
   } else {
     localStorage.removeItem(TRACK_KEY);

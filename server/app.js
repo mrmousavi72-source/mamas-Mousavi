@@ -3,18 +3,28 @@ const express = require('express');
 const { transaction } = require('./db');
 const auth = require('./auth');
 const territory = require('./territory');
+const { mapStyle } = require('./mapStyle');
 
 const USERNAME_PATTERN = /^[\p{L}\p{N}_.-]{3,24}$/u;
 
-function createApp(db, { allowSimulation = false } = {}) {
+function createApp(db, { allowSimulation = false, tilesPath = null } = {}) {
   const app = express();
   app.use(express.json({ limit: '2mb' }));
 
   const publicDir = path.join(__dirname, '..', 'public');
   const modules = path.join(__dirname, '..', 'node_modules');
   app.use(express.static(publicDir));
-  app.use('/vendor/leaflet', express.static(path.join(modules, 'leaflet', 'dist')));
+  app.use('/vendor/maplibre', express.static(path.join(modules, 'maplibre-gl', 'dist')));
+  app.use('/vendor/pmtiles', express.static(path.join(modules, 'pmtiles', 'dist')));
+  app.use('/vendor/rtl-text', express.static(path.join(modules, '@mapbox', 'mapbox-gl-rtl-text')));
   app.use('/vendor/vazirmatn', express.static(path.join(modules, 'vazirmatn')));
+
+  app.get('/map/style.json', (req, res) => res.json(mapStyle(tilesPath)));
+  // sendFile answers HTTP Range requests, which PMTiles reads tiles with.
+  app.get('/map/iran.pmtiles', (req, res, next) => {
+    if (!tilesPath) return next();
+    res.sendFile(path.resolve(tilesPath), { maxAge: '1d' }, (err) => err && next());
+  });
 
   function requireUser(req, res, next) {
     const header = req.get('authorization') ?? '';

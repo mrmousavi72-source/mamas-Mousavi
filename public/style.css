@@ -183,5 +183,13 @@ dialog input {
 }
 .error { color: var(--danger); margin: 0; font-size: 14px; }
 
-.leaflet-container { font-family: inherit; }
-.recording .leaflet-overlay-pane .leaflet-interactive { pointer-events: none; }
+.maplibregl-map { font-family: inherit; }
+.maplibregl-popup-content { font-family: inherit; text-align: right; }
+.me-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+}

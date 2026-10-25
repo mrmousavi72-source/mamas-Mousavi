@@ -1,6 +1,6 @@
 // Caches the app shell so it opens without a network; API calls and map
 // tiles always go to the network.
-const CACHE = 'ghalamro-v1';
+const CACHE = 'ghalamro-v2';
 const SHELL = [
   '/',
   '/index.html',
@@ -8,8 +8,10 @@ const SHELL = [
   '/app.js',
   '/icon.svg',
   '/manifest.webmanifest',
-  '/vendor/leaflet/leaflet.css',
-  '/vendor/leaflet/leaflet.js',
+  '/vendor/maplibre/maplibre-gl.css',
+  '/vendor/maplibre/maplibre-gl.js',
+  '/vendor/pmtiles/pmtiles.js',
+  '/vendor/rtl-text/mapbox-gl-rtl-text.js',
   '/vendor/vazirmatn/Vazirmatn-font-face.css',
 ];
 
@@ -27,7 +29,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (event.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) {
+  if (event.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/') || url.pathname.startsWith('/map/')) {
     return;
   }
   // Network first so updates show up immediately; fall back to the cache offline.
