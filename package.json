@@ -1,0 +1,22 @@
+{
+  "name": "ghalamro",
+  "version": "1.0.0",
+  "description": "بازی تصرف قلمرو روی نقشه‌ی ایران",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "ALLOW_SIMULATION=true node --disable-warning=ExperimentalWarning server/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "@turf/turf": "^7.4.0",
+    "express": "^4.22.3",
+    "leaflet": "^1.9.4",
+    "vazirmatn": "^33.0.3"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  }
+}

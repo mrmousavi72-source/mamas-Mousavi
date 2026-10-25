@@ -1,0 +1,458 @@
+'use strict';
+
+const TEHRAN = [35.6892, 51.389];
+const MAX_ACCURACY_METERS = 50;
+const MIN_STEP_METERS = 3;
+const TRACK_KEY = 'ghalamro.track';
+
+const state = {
+  token: localStorage.getItem('ghalamro.token'),
+  user: JSON.parse(localStorage.getItem('ghalamro.user') || 'null'),
+  mode: 'run',
+  config: { allowSimulation: false, rules: { closeDistanceMeters: 200 } },
+  recording: null, // { points, watchId, timer, simulated }
+  wakeLock: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const fa = (n, digits = 0) =>
+  Number(n).toLocaleString('fa-IR', { maximumFractionDigits: digits, minimumFractionDigits: digits });
+
+function formatArea(m2) {
+  if (m2 >= 1_000_000) return `${fa(m2 / 1_000_000, 2)} کیلومتر مربع`;
+  return `${fa(m2)} متر مربع`;
+}
+
+function formatDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const pad = (v) => fa(v).padStart(2, '۰');
+  return h ? `${fa(h)}:${pad(m)}:${pad(s % 60)}` : `${pad(m)}:${pad(s % 60)}`;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (state.token) headers.Authorization = `Bearer ${state.token}`;
+  const res = await fetch(path, { ...options, headers: { ...headers, ...options.headers } });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401 && state.token) setSession(null, null);
+  if (!res.ok) throw new Error(body.error || 'خطا در ارتباط با سرور');
+  return body;
+}
+
+let toastTimer;
+function toast(message, { error = false, duration = 5000 } = {}) {
+  const el = $('toast');
+  el.textContent = message;
+  el.classList.toggle('error', error);
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), duration);
+}
+
+// ---------- Map ----------
+
+const map = L.map('map', { zoomControl: false }).setView(TEHRAN, 13);
+L.control.zoom({ position: 'topleft' }).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; مشارکت‌کنندگان <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}).addTo(map);
+
+const territoryLayer = L.geoJSON(null, {
+  style: (f) => ({
+    color: f.properties.color,
+    fillColor: f.properties.color,
+    weight: f.properties.userId === state.user?.id ? 3 : 1.5,
+    fillOpacity: f.properties.userId === state.user?.id ? 0.4 : 0.25,
+  }),
+  onEachFeature: (f, layer) =>
+    layer.bindPopup(
+      `<strong>${escapeHtml(f.properties.username)}</strong><br>${formatArea(f.properties.area)}`,
+    ),
+}).addTo(map);
+
+const trackLine = L.polyline([], { color: '#f97316', weight: 5 }).addTo(map);
+let startCircle = null;
+let meMarker = null;
+
+let loadTimer;
+function loadTerritories() {
+  clearTimeout(loadTimer);
+  loadTimer = setTimeout(async () => {
+    const b = map.getBounds();
+    const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(',');
+    try {
+      const data = await api(`/api/territories?mode=${state.mode}&bbox=${bbox}`);
+      territoryLayer.clearLayers();
+      territoryLayer.addData(data);
+    } catch (err) {
+      toast(err.message, { error: true });
+    }
+  }, 250);
+}
+map.on('moveend', loadTerritories);
+
+function showMe(latlng) {
+  if (!meMarker) {
+    meMarker = L.circleMarker(latlng, {
+      radius: 8, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1,
+    }).addTo(map);
+  } else {
+    meMarker.setLatLng(latlng);
+  }
+}
+
+$('locate-btn').addEventListener('click', () => {
+  if (!navigator.geolocation) return toast('مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند.', { error: true });
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const latlng = [pos.coords.latitude, pos.coords.longitude];
+      showMe(latlng);
+      map.setView(latlng, 16);
+    },
+    () => toast('دسترسی به موقعیت مکانی داده نشد.', { error: true }),
+    { enableHighAccuracy: true, timeout: 15000 },
+  );
+});
+
+// ---------- Recording ----------
+
+function setRecordingUi(active) {
+  $('start-btn').hidden = active;
+  $('finish-btn').hidden = !active;
+  $('cancel-btn').hidden = !active;
+  $('live-stats').hidden = !active;
+  $('sim-btn').hidden = active;
+  $('sim-hint').hidden = !(active && state.recording?.simulated);
+  // Territories must not capture taps (popups) while a route is being drawn.
+  map.getContainer().classList.toggle('recording', active);
+  if (active) map.closePopup();
+  document.querySelectorAll('.mode-toggle button').forEach((b) => (b.disabled = active));
+}
+
+function updateLiveStats() {
+  const rec = state.recording;
+  if (!rec) return;
+  const pts = rec.points;
+  let distance = 0;
+  for (let i = 1; i < pts.length; i++) {
+    distance += L.latLng(pts[i - 1].lat, pts[i - 1].lng).distanceTo(L.latLng(pts[i].lat, pts[i].lng));
+  }
+  $('stat-distance').textContent = fa(distance / 1000, 2);
+  const elapsed = pts.length ? (rec.simulated ? pts.at(-1).t - pts[0].t : Date.now() - pts[0].t) : 0;
+  $('stat-time').textContent = formatDuration(elapsed);
+
+  const gapEl = $('stat-gap');
+  if (pts.length > 1) {
+    const gap = L.latLng(pts[0].lat, pts[0].lng).distanceTo(L.latLng(pts.at(-1).lat, pts.at(-1).lng));
+    gapEl.textContent = `${fa(gap)} م`;
+    gapEl.classList.toggle('ok', gap <= state.config.rules.closeDistanceMeters && pts.length > 3);
+  } else {
+    gapEl.textContent = '–';
+  }
+}
+
+function addPoint(point) {
+  const rec = state.recording;
+  const last = rec.points.at(-1);
+  if (last && L.latLng(last.lat, last.lng).distanceTo(L.latLng(point.lat, point.lng)) < MIN_STEP_METERS) {
+    return;
+  }
+  rec.points.push(point);
+  trackLine.addLatLng([point.lat, point.lng]);
+  if (rec.points.length === 1) {
+    startCircle = L.circle([point.lat, point.lng], {
+      radius: state.config.rules.closeDistanceMeters,
+      color: '#16a34a', weight: 2, dashArray: '6 6', fillOpacity: 0.08,
+    }).addTo(map);
+  }
+  if (!rec.simulated) {
+    localStorage.setItem(TRACK_KEY, JSON.stringify({ mode: state.mode, points: rec.points }));
+  }
+  updateLiveStats();
+}
+
+async function requestWakeLock() {
+  try {
+    state.wakeLock = await navigator.wakeLock?.request('screen');
+  } catch {
+    // Not critical: the screen may just turn off.
+  }
+}
+
+function startRecording({ simulated = false, resume = null } = {}) {
+  if (!state.user) return openAuth();
+  state.recording = { points: [], watchId: null, timer: null, simulated };
+  trackLine.setLatLngs([]);
+  setRecordingUi(true);
+
+  if (simulated) {
+    map.on('click', onSimClick);
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    stopRecording();
+    return toast('مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند.', { error: true });
+  }
+  resume?.forEach(addPoint);
+  state.recording.watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const latlng = [pos.coords.latitude, pos.coords.longitude];
+      showMe(latlng);
+      if (pos.coords.accuracy > MAX_ACCURACY_METERS) return;
+      if (state.recording.points.length === 0) map.setView(latlng, 16);
+      addPoint({ lat: latlng[0], lng: latlng[1], t: pos.timestamp });
+    },
+    () => toast('دسترسی به موقعیت مکانی داده نشد.', { error: true }),
+    { enableHighAccuracy: true, maximumAge: 0 },
+  );
+  state.recording.timer = setInterval(updateLiveStats, 1000);
+  requestWakeLock();
+}
+
+// Simulated track: each click is a point reached at a jogging pace.
+function onSimClick(e) {
+  const pts = state.recording.points;
+  let t = Date.now();
+  if (pts.length) {
+    const last = pts.at(-1);
+    const meters = L.latLng(last.lat, last.lng).distanceTo(e.latlng);
+    t = last.t + (meters / (state.mode === 'run' ? 3 : 7)) * 1000;
+  }
+  addPoint({ lat: e.latlng.lat, lng: e.latlng.lng, t });
+}
+
+function stopRecording() {
+  const rec = state.recording;
+  if (rec?.watchId != null) navigator.geolocation.clearWatch(rec.watchId);
+  if (rec?.timer) clearInterval(rec.timer);
+  map.off('click', onSimClick);
+  state.wakeLock?.release().catch(() => {});
+  state.wakeLock = null;
+  state.recording = null;
+  localStorage.removeItem(TRACK_KEY);
+  trackLine.setLatLngs([]);
+  startCircle?.remove();
+  startCircle = null;
+  setRecordingUi(false);
+}
+
+async function finishRecording() {
+  const rec = state.recording;
+  const points = rec.points.slice();
+  // A simulated loop is closed by returning to the first click.
+  if (rec.simulated && points.length > 2) {
+    const first = points[0];
+    const last = points.at(-1);
+    const meters = L.latLng(last.lat, last.lng).distanceTo(L.latLng(first.lat, first.lng));
+    points.push({ lat: first.lat, lng: first.lng, t: last.t + (meters / 3) * 1000 });
+  }
+
+  $('finish-btn').disabled = true;
+  try {
+    const result = await api('/api/activities', {
+      method: 'POST',
+      body: JSON.stringify({ mode: state.mode, points, simulated: rec.simulated }),
+    });
+    stopRecording();
+    let message = `🎉 ${formatArea(result.gainedSqMeters)} به قلمروی شما اضافه شد.`;
+    for (const c of result.captured) {
+      message += `\n⚔️ ${formatArea(c.areaSqMeters)} از ${c.username} تصرف شد.`;
+    }
+    toast(message, { duration: 8000 });
+    loadTerritories();
+  } catch (err) {
+    toast(err.message, { error: true });
+  } finally {
+    $('finish-btn').disabled = false;
+  }
+}
+
+$('start-btn').addEventListener('click', () => startRecording());
+$('sim-btn').addEventListener('click', () => startRecording({ simulated: true }));
+$('finish-btn').addEventListener('click', finishRecording);
+$('cancel-btn').addEventListener('click', () => {
+  if (confirm('فعالیت فعلی لغو شود؟')) stopRecording();
+});
+
+document.querySelectorAll('.mode-toggle button').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    state.mode = btn.dataset.mode;
+    document.querySelectorAll('.mode-toggle button').forEach((b) => b.classList.toggle('active', b === btn));
+    loadTerritories();
+    if ($('view-leaders').classList.contains('active')) loadLeaders();
+    if ($('view-profile').classList.contains('active')) loadProfile();
+  }),
+);
+
+// ---------- Views ----------
+
+document.querySelectorAll('.tabbar button').forEach((btn) =>
+  btn.addEventListener('click', () => {
+    const view = btn.dataset.view;
+    document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
+    if (view === 'map') map.invalidateSize();
+    if (view === 'leaders') loadLeaders();
+    if (view === 'profile') loadProfile();
+  }),
+);
+
+function timeAgo(ts) {
+  const minutes = Math.round((Date.now() - ts) / 60000);
+  if (minutes < 1) return 'همین الان';
+  if (minutes < 60) return `${fa(minutes)} دقیقه پیش`;
+  if (minutes < 1440) return `${fa(Math.round(minutes / 60))} ساعت پیش`;
+  return `${fa(Math.round(minutes / 1440))} روز پیش`;
+}
+
+async function loadLeaders() {
+  try {
+    const [leaders, feed] = await Promise.all([
+      api(`/api/leaderboard?mode=${state.mode}`),
+      api(`/api/feed?mode=${state.mode}`),
+    ]);
+    $('leaderboard').innerHTML = leaders.length
+      ? leaders
+          .map(
+            (r, i) => `<li><span class="rank">${fa(i + 1)}</span>
+              <span class="swatch" style="background:${escapeHtml(r.color)}"></span>
+              <span>${escapeHtml(r.username)}</span>
+              <span class="value">${formatArea(r.area)}</span></li>`,
+          )
+          .join('')
+      : '<li class="empty">هنوز کسی قلمرویی ندارد. اولین نفر باشید!</li>';
+    $('feed').innerHTML = feed.length
+      ? feed
+          .map(
+            (c) => `<li>⚔️ <span><strong>${escapeHtml(c.attacker)}</strong> ${formatArea(c.area)} از
+              <strong>${escapeHtml(c.victim)}</strong> گرفت</span>
+              <span class="value hint">${timeAgo(c.created_at)}</span></li>`,
+          )
+          .join('')
+      : '<li class="empty">هنوز نبردی ثبت نشده است.</li>';
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+async function loadProfile() {
+  const el = $('profile');
+  if (!state.user) {
+    el.innerHTML = '<p>برای دیدن آمار خود وارد شوید.</p><button class="primary" id="profile-login">ورود / ثبت‌نام</button>';
+    $('profile-login').addEventListener('click', openAuth);
+    return;
+  }
+  try {
+    const me = await api('/api/me');
+    const stats = me.stats.find((s) => s.mode === state.mode) ?? { activities: 0, distance: 0 };
+    const held = me.held.find((h) => h.mode === state.mode)?.area ?? 0;
+    el.innerHTML = `
+      <h2><span class="swatch" style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${escapeHtml(me.user.color)}"></span>
+        ${escapeHtml(me.user.username)}</h2>
+      <div class="stat-cards">
+        <div><strong>${formatArea(held)}</strong><small>قلمروی فعلی</small></div>
+        <div><strong>${fa(stats.activities)}</strong><small>فعالیت</small></div>
+        <div><strong>${fa((stats.distance ?? 0) / 1000, 1)} کیلومتر</strong><small>مسافت کل</small></div>
+      </div>
+      <p><button class="secondary" id="logout-btn">خروج از حساب</button></p>`;
+    $('logout-btn').addEventListener('click', async () => {
+      await api('/api/logout', { method: 'POST' }).catch(() => {});
+      setSession(null, null);
+      loadProfile();
+    });
+  } catch (err) {
+    toast(err.message, { error: true });
+  }
+}
+
+// ---------- Auth ----------
+
+let registering = false;
+
+function setSession(token, user) {
+  state.token = token;
+  state.user = user;
+  if (token) {
+    localStorage.setItem('ghalamro.token', token);
+    localStorage.setItem('ghalamro.user', JSON.stringify(user));
+  } else {
+    localStorage.removeItem('ghalamro.token');
+    localStorage.removeItem('ghalamro.user');
+  }
+  $('account-btn').textContent = user ? user.username : 'ورود';
+  loadTerritories();
+}
+
+function setAuthMode(register) {
+  registering = register;
+  $('auth-title').textContent = register ? 'ثبت‌نام' : 'ورود';
+  $('auth-submit').textContent = register ? 'ساخت حساب' : 'ورود';
+  $('auth-switch').textContent = register ? 'حساب دارید؟ ورود' : 'حساب ندارید؟ ثبت‌نام';
+  $('auth-form').password.autocomplete = register ? 'new-password' : 'current-password';
+}
+
+function openAuth() {
+  setAuthMode(false);
+  $('auth-error').hidden = true;
+  $('auth-dialog').showModal();
+}
+
+$('account-btn').addEventListener('click', () => {
+  if (state.user) document.querySelector('.tabbar [data-view="profile"]').click();
+  else openAuth();
+});
+$('auth-switch').addEventListener('click', () => setAuthMode(!registering));
+$('auth-close').addEventListener('click', () => $('auth-dialog').close());
+$('auth-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  try {
+    const result = await api(registering ? '/api/register' : '/api/login', {
+      method: 'POST',
+      body: JSON.stringify({ username: form.username.value.trim(), password: form.password.value }),
+    });
+    setSession(result.token, result.user);
+    form.reset();
+    $('auth-dialog').close();
+    toast(`خوش آمدید ${result.user.username}!`);
+  } catch (err) {
+    $('auth-error').textContent = err.message;
+    $('auth-error').hidden = false;
+  }
+});
+
+// ---------- Startup ----------
+
+async function init() {
+  setSession(state.token, state.user);
+  try {
+    state.config = await api('/api/config');
+  } catch {
+    // Keep defaults.
+  }
+  $('sim-tools').hidden = !state.config.allowSimulation;
+
+  // Resume a GPS recording interrupted by a reload.
+  const saved = JSON.parse(localStorage.getItem(TRACK_KEY) || 'null');
+  if (saved?.points?.length && state.user && confirm('یک فعالیت نیمه‌کاره پیدا شد. ادامه می‌دهید؟')) {
+    state.mode = saved.mode;
+    document.querySelectorAll('.mode-toggle button').forEach((b) =>
+      b.classList.toggle('active', b.dataset.mode === saved.mode),
+    );
+    startRecording({ resume: saved.points });
+  } else {
+    localStorage.removeItem(TRACK_KEY);
+  }
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+init();

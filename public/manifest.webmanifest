@@ -1,0 +1,15 @@
+{
+  "name": "قلمرو — بازی تصرف نقشه‌ی ایران",
+  "short_name": "قلمرو",
+  "description": "بدوید یا رکاب بزنید، حلقه ببندید و محله‌ها را تصرف کنید.",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

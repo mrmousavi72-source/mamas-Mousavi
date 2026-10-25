@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f766e">
+  <title>قلمرو</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="stylesheet" href="/vendor/vazirmatn/Vazirmatn-font-face.css">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>قلمرو</h1>
+    <div class="mode-toggle" role="group" aria-label="نوع فعالیت">
+      <button data-mode="run" class="active">🏃 دویدن</button>
+      <button data-mode="ride">🚴 دوچرخه</button>
+    </div>
+    <button id="account-btn" class="link-btn">ورود</button>
+  </header>
+
+  <main>
+    <section id="view-map" class="view active">
+      <div id="map"></div>
+      <div id="toast" class="toast" hidden></div>
+      <div class="panel">
+        <div id="live-stats" class="live-stats" hidden>
+          <div><span id="stat-distance">۰</span><small>کیلومتر</small></div>
+          <div><span id="stat-time">۰۰:۰۰</span><small>زمان</small></div>
+          <div><span id="stat-gap">–</span><small>تا نقطه‌ی شروع</small></div>
+        </div>
+        <div class="actions">
+          <button id="start-btn" class="primary">شروع فعالیت</button>
+          <button id="finish-btn" class="primary" hidden>پایان و تصرف</button>
+          <button id="cancel-btn" class="secondary" hidden>لغو</button>
+          <button id="locate-btn" class="secondary" title="موقعیت من">📍</button>
+        </div>
+        <div id="sim-tools" class="sim-tools" hidden>
+          <button id="sim-btn" class="secondary">✏️ رسم مسیر آزمایشی</button>
+          <span id="sim-hint" class="hint" hidden>روی نقشه کلیک کنید تا حلقه بسازید، سپس «پایان و تصرف».</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-leaders" class="view">
+      <h2>رتبه‌بندی بر اساس مساحت قلمرو</h2>
+      <ol id="leaderboard" class="list"></ol>
+      <h2>آخرین نبردها</h2>
+      <ul id="feed" class="list"></ul>
+    </section>
+
+    <section id="view-profile" class="view">
+      <div id="profile"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-view="map" class="active">🗺️<span>نقشه</span></button>
+    <button data-view="leaders">🏆<span>رتبه‌بندی</span></button>
+    <button data-view="profile">👤<span>پروفایل</span></button>
+  </nav>
+
+  <dialog id="auth-dialog">
+    <form id="auth-form" method="dialog">
+      <h2 id="auth-title">ورود</h2>
+      <label>نام کاربری<input name="username" autocomplete="username" required></label>
+      <label>رمز عبور<input name="password" type="password" autocomplete="current-password" required minlength="8"></label>
+      <p id="auth-error" class="error" hidden></p>
+      <button type="submit" class="primary" id="auth-submit">ورود</button>
+      <button type="button" class="link-btn" id="auth-switch">حساب ندارید؟ ثبت‌نام</button>
+      <button type="button" class="link-btn" id="auth-close">بستن</button>
+    </form>
+  </dialog>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
