@@ -9,7 +9,7 @@ set -euo pipefail
 
 MAX_ZOOM="${1:-15}"
 PMTILES="${PMTILES:-pmtiles}"
-OUT="$(dirname "$0")/../data/iran.pmtiles"
+OUT="${OUT:-$(dirname "$0")/../data/iran.pmtiles}"
 # Iran with a small margin: west, south, east, north.
 BBOX="43.9,24.8,63.4,39.9"
 
