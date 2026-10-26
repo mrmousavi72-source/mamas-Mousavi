@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f766e">
+  <meta name="theme-color" content="#2a2e33">
   <title>بدو | Bedo</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -13,65 +13,162 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1>بدو</h1>
-    <div class="mode-toggle" role="group" aria-label="نوع فعالیت">
-      <button data-mode="run" class="active">🏃 دویدن</button>
-      <button data-mode="ride">🚴 دوچرخه</button>
-    </div>
-    <button id="account-btn" class="link-btn">ورود</button>
-  </header>
-
   <main>
-    <section id="view-map" class="view active">
+    <!-- Play: the map with everyone's territory -->
+    <section id="view-play" class="view active">
       <div id="map"></div>
+
+      <header class="topbar" id="play-head">
+        <button id="avatar-btn" class="badge" aria-label="پروفایل">ب</button>
+        <span class="wordmark">بدو</span>
+        <div class="topbar-end">
+          <button id="mode-btn" class="pill" aria-haspopup="true">
+            <span id="mode-icon">👟</span><span id="mode-label">دویدن</span><span class="caret">▾</span>
+          </button>
+        </div>
+        <div id="mode-menu" class="menu" hidden>
+          <button data-mode="run">👟 دویدن / پیاده‌روی</button>
+          <button data-mode="ride">🚲 دوچرخه</button>
+        </div>
+      </header>
+
+      <header class="topbar plan-head" id="plan-head" hidden>
+        <button id="plan-back" class="back">‹ بازگشت</button>
+        <div class="plan-metrics">
+          <span><small>مسافت</small><b id="plan-distance">۰ م</b></span>
+          <span><small>تصرف</small><b id="plan-area">۰ م²</b></span>
+        </div>
+      </header>
+
+      <div class="map-overlay">
+        <div id="area-chip" class="chip" title="مساحت قلمروی من">
+          <span class="chip-icon">◆</span><b id="area-value">۰٫۰۰</b><small>کیلومتر²</small>
+        </div>
+        <button id="locate-btn" class="round" aria-label="موقعیت من">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+      </div>
+
       <div id="toast" class="toast" hidden></div>
-      <div class="panel">
-        <div id="live-stats" class="live-stats" hidden>
-          <div><span id="stat-distance">۰</span><small>کیلومتر</small></div>
-          <div><span id="stat-time">۰۰:۰۰</span><small>زمان</small></div>
-          <div><span id="stat-gap">–</span><small>تا نقطه‌ی شروع</small></div>
+
+      <!-- Idle: plan, ruler of the visible area, start -->
+      <div id="dock" class="dock">
+        <button id="plan-btn" class="dock-side">〰 مسیر</button>
+        <div id="ruler" class="ruler">
+          <span class="ruler-name">👑 <b id="ruler-name">هنوز کسی نیست</b></span>
+          <small><span id="ruler-area" class="num"></span> فرمانروای محله</small>
         </div>
-        <div class="actions">
-          <button id="start-btn" class="primary">شروع فعالیت</button>
-          <button id="finish-btn" class="primary" hidden>پایان و تصرف</button>
-          <button id="cancel-btn" class="secondary" hidden>لغو</button>
-          <button id="locate-btn" class="secondary" title="موقعیت من">📍</button>
+        <button id="start-btn" class="dock-start">👟 شروع</button>
+      </div>
+
+      <!-- Recording -->
+      <div id="live-sheet" class="sheet" hidden>
+        <div class="big-area"><span id="live-area" class="num">۰</span><small>متر²</small></div>
+        <span id="live-status" class="status">در حال تصرف</span>
+        <div class="stats3">
+          <div><small>مسافت</small><b id="live-distance" class="num">۰٫۰۰</b><i>کیلومتر</i></div>
+          <div><small>زمان</small><b id="live-time" class="num">۰:۰۰</b></div>
+          <div><small id="live-pace-label">سرعت</small><b id="live-pace" class="num">–</b><i id="live-pace-unit">دقیقه/کیلومتر</i></div>
         </div>
-        <div id="sim-tools" class="sim-tools" hidden>
-          <button id="sim-btn" class="secondary">✏️ رسم مسیر آزمایشی</button>
-          <span id="sim-hint" class="hint" hidden>روی نقشه کلیک کنید تا حلقه بسازید، سپس «پایان و تصرف».</span>
+        <div class="sheet-actions">
+          <button id="pause-btn" class="btn btn-dark">❚❚ توقف</button>
+          <button id="finish-btn" class="btn btn-lime">پایان</button>
+        </div>
+      </div>
+
+      <!-- Review before saving -->
+      <div id="summary-sheet" class="sheet tall" hidden>
+        <div class="big-area"><span id="sum-area" class="num">۰</span><small>متر²</small></div>
+        <span id="sum-status" class="status"></span>
+        <label class="title-field"><input id="sum-title" maxlength="80" aria-label="عنوان فعالیت"><span aria-hidden="true">✎</span></label>
+        <div class="stats3">
+          <div><small>مسافت</small><b id="sum-distance" class="num">۰</b><i>کیلومتر</i></div>
+          <div><small>زمان</small><b id="sum-time" class="num">۰:۰۰</b></div>
+          <div><small id="sum-pace-label">سرعت</small><b id="sum-pace" class="num">–</b><i id="sum-pace-unit"></i></div>
+        </div>
+        <textarea id="sum-note" rows="3" maxlength="1000" placeholder="از این دویدن بنویس…"></textarea>
+        <button id="save-btn" class="btn btn-dark wide">ثبت فعالیت</button>
+        <div class="sheet-actions">
+          <button id="resume-btn" class="btn btn-light">ادامه</button>
+          <button id="discard-btn" class="btn btn-ghost">حذف فعالیت</button>
+        </div>
+        <div id="discard-confirm" class="confirm" hidden>
+          <span>این فعالیت ذخیره نمی‌شود. مطمئنید؟</span>
+          <button id="discard-yes" class="btn btn-danger">حذف کن</button>
+          <button id="discard-no" class="btn btn-light">نه</button>
+        </div>
+      </div>
+
+      <!-- Route planning -->
+      <div id="plan-sheet" class="sheet" hidden>
+        <p class="hint">روی نقشه بزنید تا مسیرتان را بکشید. حلقه‌ی بسته بیشترین زمین را می‌گیرد؛ مسیر رفت‌وبرگشتی تقریباً هیچ.</p>
+        <div class="sheet-actions">
+          <button id="plan-undo" class="round light" aria-label="برگرداندن">↶</button>
+          <button id="plan-clear" class="round light" aria-label="پاک کردن">✕</button>
+          <button id="plan-claim" class="btn btn-lime" hidden>ثبت آزمایشی</button>
         </div>
       </div>
     </section>
 
-    <section id="view-leaders" class="view">
-      <h2>رتبه‌بندی بر اساس مساحت قلمرو</h2>
-      <ol id="leaderboard" class="list"></ol>
-      <h2>آخرین نبردها</h2>
-      <ul id="feed" class="list"></ul>
+    <!-- Rankings -->
+    <section id="view-ranks" class="view">
+      <header class="page-head">
+        <h2>رتبه‌ها</h2>
+        <div class="segmented" id="ranks-mode">
+          <button data-mode="run" class="active">دویدن</button>
+          <button data-mode="ride">دوچرخه</button>
+        </div>
+      </header>
+      <div id="podium" class="podium"></div>
+      <ol id="leaderboard" class="ranklist"></ol>
+      <div id="you-row" class="you-row" hidden></div>
+      <h3>آخرین نبردها</h3>
+      <ul id="feed" class="feed"></ul>
     </section>
 
-    <section id="view-profile" class="view">
+    <!-- Me -->
+    <section id="view-me" class="view">
       <div id="profile"></div>
     </section>
   </main>
 
   <nav class="tabbar">
-    <button data-view="map" class="active">🗺️<span>نقشه</span></button>
-    <button data-view="leaders">🏆<span>رتبه‌بندی</span></button>
-    <button data-view="profile">👤<span>پروفایل</span></button>
+    <button data-view="me"><span class="tab-icon">◉</span><span>من</span></button>
+    <button data-view="play" class="active"><span class="tab-icon">◍</span><span>بازی</span></button>
+    <button data-view="ranks"><span class="tab-icon">♛</span><span>رتبه‌ها</span></button>
   </nav>
 
-  <dialog id="auth-dialog">
+  <dialog id="auth-dialog" class="sheet-dialog">
     <form id="auth-form" method="dialog">
-      <h2 id="auth-title">ورود</h2>
+      <h2 id="auth-title" class="display">ورود</h2>
       <label>نام کاربری<input name="username" autocomplete="username" required></label>
       <label>رمز عبور<input name="password" type="password" autocomplete="current-password" required minlength="8"></label>
       <p id="auth-error" class="error" hidden></p>
-      <button type="submit" class="primary" id="auth-submit">ورود</button>
-      <button type="button" class="link-btn" id="auth-switch">حساب ندارید؟ ثبت‌نام</button>
-      <button type="button" class="link-btn" id="auth-close">بستن</button>
+      <button type="submit" class="btn btn-lime wide" id="auth-submit">ورود</button>
+      <button type="button" class="btn btn-ghost" id="auth-switch">حساب ندارید؟ ثبت‌نام</button>
+      <button type="button" class="btn btn-ghost" id="auth-close">بستن</button>
+    </form>
+  </dialog>
+
+  <dialog id="color-dialog" class="sheet-dialog">
+    <form method="dialog">
+      <h2 class="display">رنگت رو انتخاب کن</h2>
+      <p>قلمروی تو روی نقشه با این رنگ دیده می‌شود.</p>
+      <div id="color-grid" class="color-grid"></div>
+      <button class="btn btn-lime wide" id="color-done">ادامه</button>
+    </form>
+  </dialog>
+
+  <dialog id="intro-dialog" class="sheet-dialog">
+    <form method="dialog" id="intro-form">
+      <div id="intro-art" class="intro-art" aria-hidden="true"></div>
+      <h2 id="intro-title" class="display"></h2>
+      <p id="intro-text"></p>
+      <div class="dots" id="intro-dots"></div>
+      <div class="sheet-actions">
+        <button type="button" class="btn btn-ghost" id="intro-skip">رد شدن</button>
+        <button type="button" class="btn btn-lime" id="intro-next" autofocus>بعدی</button>
+      </div>
     </form>
   </dialog>
 

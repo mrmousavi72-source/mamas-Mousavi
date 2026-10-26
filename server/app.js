@@ -97,7 +97,20 @@ function createApp(db, { allowSimulation = false, tilesPath = null } = {}) {
       )
       .all(req.user.id);
     const held = db.prepare('SELECT mode, area FROM territories WHERE user_id = ?').all(req.user.id);
-    res.json({ user: req.user, stats, held });
+    const recent = db
+      .prepare(
+        `SELECT id, mode, title, distance, duration_ms, claimed_area, created_at FROM activities
+         WHERE user_id = ? ORDER BY created_at DESC LIMIT 10`,
+      )
+      .all(req.user.id);
+    res.json({ user: req.user, stats, held, recent, palette: auth.PALETTE });
+  });
+
+  app.patch('/api/me', requireUser, (req, res) => {
+    const { color } = req.body ?? {};
+    if (!auth.PALETTE.includes(color)) return res.status(400).json({ error: 'این رنگ در فهرست نیست.' });
+    db.prepare('UPDATE users SET color = ? WHERE id = ?').run(color, req.user.id);
+    res.json({ user: { ...req.user, color } });
   });
 
   // Territories intersecting the visible map area.
@@ -132,6 +145,8 @@ function createApp(db, { allowSimulation = false, tilesPath = null } = {}) {
 
   app.post('/api/activities', requireUser, (req, res) => {
     const { mode, points, simulated } = req.body ?? {};
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim().slice(0, 80) : '';
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 1000) : '';
     if (simulated && !allowSimulation) {
       return res.status(403).json({ error: 'حالت آزمایشی روی این سرور غیرفعال است.' });
     }
@@ -172,8 +187,8 @@ function createApp(db, { allowSimulation = false, tilesPath = null } = {}) {
 
       const activity = db
         .prepare(
-          `INSERT INTO activities (user_id, mode, distance, duration_ms, claimed_area, simulated, track, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO activities (user_id, mode, distance, duration_ms, claimed_area, simulated, track, title, note, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           req.user.id,
@@ -183,6 +198,8 @@ function createApp(db, { allowSimulation = false, tilesPath = null } = {}) {
           gained,
           simulated ? 1 : 0,
           JSON.stringify(coords),
+          title,
+          note,
           now,
         );
       const activityId = Number(activity.lastInsertRowid);

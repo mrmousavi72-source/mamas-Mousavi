@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS activities (
   claimed_area REAL NOT NULL,
   simulated INTEGER NOT NULL DEFAULT 0,
   track TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS captures (
@@ -53,6 +55,11 @@ function openDatabase(path) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  // Databases created before activities had a title and note.
+  const columns = db.prepare('PRAGMA table_info(activities)').all().map((c) => c.name);
+  for (const name of ['title', 'note']) {
+    if (!columns.includes(name)) db.exec(`ALTER TABLE activities ADD COLUMN ${name} TEXT NOT NULL DEFAULT ''`);
+  }
   return db;
 }
 

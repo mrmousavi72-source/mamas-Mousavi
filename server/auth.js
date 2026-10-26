@@ -41,10 +41,19 @@ function userForToken(db, token) {
   );
 }
 
-// Distinct, readable colors spread around the hue circle.
+// Territory colours a player can pick; they read clearly on the night map.
+const PALETTE = ['#2fd27a', '#e5484d', '#1f5bff', '#e8c22e', '#a442e0', '#aab4c8', '#ee6a1f', '#6cc3b6'];
+
 function colorForUser(seed) {
-  const hue = Math.round((seed * 137.508) % 360);
-  return `hsl(${hue}, 70%, 45%)`;
+  return PALETTE[seed % PALETTE.length];
 }
 
-module.exports = { hashPassword, verifyPassword, createSession, userForToken, hashToken, colorForUser };
+module.exports = {
+  hashPassword,
+  verifyPassword,
+  createSession,
+  userForToken,
+  hashToken,
+  colorForUser,
+  PALETTE,
+};
