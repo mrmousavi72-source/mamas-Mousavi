@@ -4,11 +4,11 @@ const TEHRAN = [51.389, 35.6892]; // [lng, lat]
 const IRAN_BOUNDS = [[42, 23.5], [65, 41.5]];
 const MAX_ACCURACY_METERS = 50;
 const MIN_STEP_METERS = 3;
-const TRACK_KEY = 'ghalamro.track';
+const TRACK_KEY = 'bedo.track';
 
 const state = {
-  token: localStorage.getItem('ghalamro.token'),
-  user: JSON.parse(localStorage.getItem('ghalamro.user') || 'null'),
+  token: localStorage.getItem('bedo.token'),
+  user: JSON.parse(localStorage.getItem('bedo.user') || 'null'),
   mode: 'run',
   config: { allowSimulation: false, rules: { closeDistanceMeters: 200 } },
   recording: null, // { points, watchId, timer, simulated }
@@ -447,11 +447,11 @@ function setSession(token, user) {
   state.token = token;
   state.user = user;
   if (token) {
-    localStorage.setItem('ghalamro.token', token);
-    localStorage.setItem('ghalamro.user', JSON.stringify(user));
+    localStorage.setItem('bedo.token', token);
+    localStorage.setItem('bedo.user', JSON.stringify(user));
   } else {
-    localStorage.removeItem('ghalamro.token');
-    localStorage.removeItem('ghalamro.user');
+    localStorage.removeItem('bedo.token');
+    localStorage.removeItem('bedo.user');
   }
   $('account-btn').textContent = user ? user.username : 'ورود';
   highlightOwnTerritory();

@@ -9,5 +9,5 @@ const tilesPath = process.env.MAP_TILES_PATH ?? path.join(__dirname, '..', 'data
 
 const app = createApp(openDatabase(dbPath), { allowSimulation, tilesPath });
 app.listen(port, () => {
-  console.log(`قلمرو روی http://localhost:${port} اجرا شد (حالت آزمایشی: ${allowSimulation ? 'فعال' : 'غیرفعال'})`);
+  console.log(`بدو روی http://localhost:${port} اجرا شد (حالت آزمایشی: ${allowSimulation ? 'فعال' : 'غیرفعال'})`);
 });
