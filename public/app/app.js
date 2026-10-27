@@ -942,7 +942,7 @@ async function init() {
     $('intro-dialog').showModal();
   }
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' }).catch(() => {});
 }
 
 init();

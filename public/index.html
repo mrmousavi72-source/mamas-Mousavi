@@ -3,177 +3,249 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#2a2e33">
-  <title>بدو | Bedo</title>
-  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0c0e10">
+  <title>بدو | شهرت رو بگیر</title>
+  <meta name="description" content="بدو بازی تصرف محله‌ها روی نقشه‌ی ایران است. بدو یا رکاب بزن، حلقه ببند و زمین‌های داخلش را مال خودت کن.">
+  <meta property="og:title" content="بدو | شهرت رو بگیر">
+  <meta property="og:description" content="بدو یا رکاب بزن، حلقه ببند و محله‌ها را تصرف کن.">
+  <meta property="og:image" content="/site/img/hero-map.webp">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="/icon.svg">
   <link rel="stylesheet" href="/vendor/vazirmatn/Vazirmatn-font-face.css">
-  <link rel="stylesheet" href="/vendor/maplibre/maplibre-gl.css">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/site/site.css">
 </head>
 <body>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a href="/" class="logo" aria-label="بدو">بدو</a>
+      <nav class="nav-links" aria-label="بخش‌های سایت">
+        <a href="#how">چطور بازی کنیم</a>
+        <a href="#features">ویژگی‌ها</a>
+        <a href="#install">نصب روی گوشی</a>
+        <a href="#faq">سؤالات</a>
+      </nav>
+      <a href="/app/" class="btn btn-lime btn-sm">بازی کن</a>
+    </div>
+  </header>
+
   <main>
-    <!-- Play: the map with everyone's territory -->
-    <section id="view-play" class="view active">
-      <div id="map"></div>
-
-      <header class="topbar" id="play-head">
-        <button id="avatar-btn" class="badge" aria-label="پروفایل">ب</button>
-        <span class="wordmark">بدو</span>
-        <div class="topbar-end">
-          <button id="mode-btn" class="pill" aria-haspopup="true">
-            <span id="mode-icon">👟</span><span id="mode-label">دویدن</span><span class="caret">▾</span>
-          </button>
+    <section class="hero">
+      <div class="hero-map" aria-hidden="true"></div>
+      <div class="wrap hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow">بازی تصرف محله‌ها روی نقشه‌ی ایران</p>
+          <h1>شهرت رو بگیر.<br><span class="lime">محله به محله.</span></h1>
+          <p class="lead">بدو، رکاب بزن، دور بزن. هر حلقه‌ای که ببندی، زمین داخلش مال توئه، تا وقتی کسی ازت پسش نگیره.</p>
+          <div class="cta-row">
+            <a href="/app/" class="btn btn-lime">همین الان شروع کن</a>
+            <a href="#how" class="btn btn-outline">چطور کار می‌کنه؟</a>
+          </div>
+          <ul class="hero-points">
+            <li>رایگان</li>
+            <li>بدون نیاز به اپ‌استور</li>
+            <li>نقشه‌ی کامل ایران به فارسی</li>
+          </ul>
         </div>
-        <div id="mode-menu" class="menu" hidden>
-          <button data-mode="run">👟 دویدن / پیاده‌روی</button>
-          <button data-mode="ride">🚲 دوچرخه</button>
-        </div>
-      </header>
-
-      <header class="topbar plan-head" id="plan-head" hidden>
-        <button id="plan-back" class="back">‹ بازگشت</button>
-        <div class="plan-metrics">
-          <span><small>مسافت</small><b id="plan-distance">۰ م</b></span>
-          <span><small>تصرف</small><b id="plan-area">۰ م²</b></span>
-        </div>
-      </header>
-
-      <div class="map-overlay">
-        <div id="area-chip" class="chip" title="مساحت قلمروی من">
-          <span class="chip-icon">◆</span><b id="area-value">۰٫۰۰</b><small>کیلومتر²</small>
-        </div>
-        <button id="locate-btn" class="round" aria-label="موقعیت من">
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4" stroke="currentColor" stroke-width="2"/></svg>
-        </button>
-      </div>
-
-      <div id="toast" class="toast" hidden></div>
-
-      <!-- Idle: plan, ruler of the visible area, start -->
-      <div id="dock" class="dock">
-        <button id="plan-btn" class="dock-side">〰 مسیر</button>
-        <div id="ruler" class="ruler">
-          <span class="ruler-name">👑 <b id="ruler-name">هنوز کسی نیست</b></span>
-          <small><span id="ruler-area" class="num"></span> فرمانروای محله</small>
-        </div>
-        <button id="start-btn" class="dock-start">👟 شروع</button>
-      </div>
-
-      <!-- Recording -->
-      <div id="live-sheet" class="sheet" hidden>
-        <div class="big-area"><span id="live-area" class="num">۰</span><small>متر²</small></div>
-        <span id="live-status" class="status">در حال تصرف</span>
-        <div class="stats3">
-          <div><small>مسافت</small><b id="live-distance" class="num">۰٫۰۰</b><i>کیلومتر</i></div>
-          <div><small>زمان</small><b id="live-time" class="num">۰:۰۰</b></div>
-          <div><small id="live-pace-label">سرعت</small><b id="live-pace" class="num">–</b><i id="live-pace-unit">دقیقه/کیلومتر</i></div>
-        </div>
-        <div class="sheet-actions">
-          <button id="pause-btn" class="btn btn-dark">❚❚ توقف</button>
-          <button id="finish-btn" class="btn btn-lime">پایان</button>
-        </div>
-      </div>
-
-      <!-- Review before saving -->
-      <div id="summary-sheet" class="sheet tall" hidden>
-        <div class="big-area"><span id="sum-area" class="num">۰</span><small>متر²</small></div>
-        <span id="sum-status" class="status"></span>
-        <label class="title-field"><input id="sum-title" maxlength="80" aria-label="عنوان فعالیت"><span aria-hidden="true">✎</span></label>
-        <div class="stats3">
-          <div><small>مسافت</small><b id="sum-distance" class="num">۰</b><i>کیلومتر</i></div>
-          <div><small>زمان</small><b id="sum-time" class="num">۰:۰۰</b></div>
-          <div><small id="sum-pace-label">سرعت</small><b id="sum-pace" class="num">–</b><i id="sum-pace-unit"></i></div>
-        </div>
-        <textarea id="sum-note" rows="3" maxlength="1000" placeholder="از این دویدن بنویس…"></textarea>
-        <button id="save-btn" class="btn btn-dark wide">ثبت فعالیت</button>
-        <div class="sheet-actions">
-          <button id="resume-btn" class="btn btn-light">ادامه</button>
-          <button id="discard-btn" class="btn btn-ghost">حذف فعالیت</button>
-        </div>
-        <div id="discard-confirm" class="confirm" hidden>
-          <span>این فعالیت ذخیره نمی‌شود. مطمئنید؟</span>
-          <button id="discard-yes" class="btn btn-danger">حذف کن</button>
-          <button id="discard-no" class="btn btn-light">نه</button>
-        </div>
-      </div>
-
-      <!-- Route planning -->
-      <div id="plan-sheet" class="sheet" hidden>
-        <p class="hint">روی نقشه بزنید تا مسیرتان را بکشید. حلقه‌ی بسته بیشترین زمین را می‌گیرد؛ مسیر رفت‌وبرگشتی تقریباً هیچ.</p>
-        <div class="sheet-actions">
-          <button id="plan-undo" class="round light" aria-label="برگرداندن">↶</button>
-          <button id="plan-clear" class="round light" aria-label="پاک کردن">✕</button>
-          <button id="plan-claim" class="btn btn-lime" hidden>ثبت آزمایشی</button>
+        <div class="phone hero-phone">
+          <img src="/site/img/phone-home.webp" width="560" height="1212" alt="صفحه‌ی اصلی بدو با قلمروهای رنگی بازیکن‌ها روی نقشه‌ی تهران">
         </div>
       </div>
     </section>
 
-    <!-- Rankings -->
-    <section id="view-ranks" class="view">
-      <header class="page-head">
-        <h2>رتبه‌ها</h2>
-        <div class="segmented" id="ranks-mode">
-          <button data-mode="run" class="active">دویدن</button>
-          <button data-mode="ride">دوچرخه</button>
-        </div>
-      </header>
-      <div id="podium" class="podium"></div>
-      <ol id="leaderboard" class="ranklist"></ol>
-      <div id="you-row" class="you-row" hidden></div>
-      <h3>آخرین نبردها</h3>
-      <ul id="feed" class="feed"></ul>
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker-track">
+        <span>دور بزن</span><span>بگیرش</span><span>نگهش دار</span><span>تهران</span><span>اصفهان</span><span>شیراز</span><span>مشهد</span><span>تبریز</span><span>کرج</span><span>اهواز</span><span>رشت</span>
+        <span>دور بزن</span><span>بگیرش</span><span>نگهش دار</span><span>تهران</span><span>اصفهان</span><span>شیراز</span><span>مشهد</span><span>تبریز</span><span>کرج</span><span>اهواز</span><span>رشت</span>
+      </div>
+    </div>
+
+    <section id="how" class="section light">
+      <div class="wrap">
+        <p class="eyebrow dark">قانون بازی ساده است</p>
+        <h2>سه قدم تا فرمانروایی</h2>
+        <ol class="steps">
+          <li class="step">
+            <svg viewBox="0 0 320 200" class="step-art" aria-hidden="true">
+              <rect width="320" height="200" fill="#2a2e33"/>
+              <g stroke="#3a4047" stroke-width="7"><path d="M0 40H320M0 100H320M0 160H320M60 0V200M150 0V200M240 0V200"/></g>
+              <path d="M70 140 L120 50 L235 60 L265 135 L180 168 Z" fill="#45f03a" fill-opacity=".25" stroke="#45f03a" stroke-width="6" stroke-linejoin="round"/>
+              <circle cx="70" cy="140" r="10" fill="#2f6bff" stroke="#fff" stroke-width="3"/>
+            </svg>
+            <span class="step-no">۱</span>
+            <h3>حلقه رو ببند</h3>
+            <p>وقتی حرکت می‌کنی، مسیرت روی نقشه کشیده می‌شود. به نقطه‌ی شروع برگرد تا هر چه داخل حلقه است مال تو شود. حتی یک بلوک کوچک هم حساب است.</p>
+          </li>
+          <li class="step">
+            <svg viewBox="0 0 320 200" class="step-art" aria-hidden="true">
+              <rect width="320" height="200" fill="#2a2e33"/>
+              <g stroke="#3a4047" stroke-width="7"><path d="M0 40H320M0 100H320M0 160H320M60 0V200M150 0V200M240 0V200"/></g>
+              <rect x="50" y="35" width="140" height="115" fill="#e5484d" fill-opacity=".45" stroke="#e5484d" stroke-width="4"/>
+              <path d="M140 70 L280 62 L275 170 L135 165 Z" fill="#45f03a" fill-opacity=".3" stroke="#45f03a" stroke-width="6" stroke-linejoin="round"/>
+            </svg>
+            <span class="step-no">۲</span>
+            <h3>بگیرش</h3>
+            <p>از زمین بقیه رد شو و دورش حلقه بزن تا مال تو شود. حواست باشد؛ آن‌ها هم می‌توانند زمینت را پس بگیرند.</p>
+          </li>
+          <li class="step">
+            <svg viewBox="0 0 320 200" class="step-art" aria-hidden="true">
+              <rect width="320" height="200" fill="#2a2e33"/>
+              <g stroke="#3a4047" stroke-width="7"><path d="M0 40H320M0 100H320M0 160H320M60 0V200M150 0V200M240 0V200"/></g>
+              <circle cx="115" cy="100" r="62" fill="#45f03a" fill-opacity=".25" stroke="#45f03a" stroke-width="6"/>
+              <text x="115" y="108" fill="#fff" font-size="22" font-weight="900" text-anchor="middle" font-family="Vazirmatn">عالی</text>
+              <path d="M262 25 L268 178" stroke="#e8c22e" stroke-width="7"/>
+              <text x="232" y="108" fill="#e8c22e" font-size="20" font-weight="900" text-anchor="middle" font-family="Vazirmatn">نه!</text>
+            </svg>
+            <span class="step-no">۳</span>
+            <h3>بزرگش کن</h3>
+            <p>محله به محله، یا یک‌جا. مسیر رفت‌وبرگشتی تقریباً هیچ زمینی نمی‌گیرد؛ هر چه دورتر بزنی، بیشتر می‌گیری.</p>
+          </li>
+        </ol>
+      </div>
     </section>
 
-    <!-- Me -->
-    <section id="view-me" class="view">
-      <div id="profile"></div>
+    <section id="features" class="section">
+      <div class="wrap feature">
+        <div class="feature-copy">
+          <p class="eyebrow">موقع دویدن</p>
+          <h2>هر قدم، زنده<br>روی نقشه.</h2>
+          <p class="lead">بزرگ‌ترین عدد صفحه، زمینی است که داری می‌گیری. همان لحظه می‌بینی چقدر تا بستن حلقه مانده.</p>
+          <ul class="checks">
+            <li>متراژ تصرف، لحظه‌به‌لحظه</li>
+            <li>مسافت، زمان و سرعت</li>
+            <li>توقف و ادامه، هر وقت خواستی</li>
+            <li>اگر صفحه بسته شد، فعالیتت از دست نمی‌رود</li>
+          </ul>
+        </div>
+        <div class="phone"><img src="/site/img/phone-live.webp" width="560" height="1212" loading="lazy" alt="صفحه‌ی دویدن زنده با متراژ تصرف، مسافت، زمان و سرعت"></div>
+      </div>
+
+      <div class="wrap feature reverse">
+        <div class="feature-copy">
+          <p class="eyebrow">قبل از دویدن</p>
+          <h2>نقشه بکش،<br>بعد حمله کن.</h2>
+          <p class="lead">مسیرت را روی نقشه بکش و قبل از بیرون رفتن ببین چقدر مسافت است و چقدر زمین می‌گیرد. اولین رقیبت را انتخاب کن.</p>
+        </div>
+        <div class="phone"><img src="/site/img/phone-plan.webp" width="560" height="1212" loading="lazy" alt="برنامه‌ریزی مسیر با مسافت و متراژ تخمینی تصرف"></div>
+      </div>
+
+      <div class="wrap feature">
+        <div class="feature-copy">
+          <p class="eyebrow">رقابت</p>
+          <h2>فرمانروای<br>محله شو.</h2>
+          <p class="lead">بزرگ‌ترین قلمروها روی سکو می‌روند. ببین چه کسی زمینت را گرفته و برو پسش بگیر.</p>
+          <ul class="checks">
+            <li>رتبه‌بندی بر اساس مساحت قلمرو</li>
+            <li>آخرین نبردها: چه کسی از چه کسی گرفت</li>
+            <li>هشت رنگ برای قلمروی تو</li>
+          </ul>
+        </div>
+        <div class="phone"><img src="/site/img/phone-ranks.webp" width="560" height="1212" loading="lazy" alt="رتبه‌بندی با سکوی نفرات اول تا سوم"></div>
+      </div>
+    </section>
+
+    <section class="section light">
+      <div class="wrap">
+        <h2 class="center">بدوی یا رکاب بزنی؟</h2>
+        <p class="lead center dark-muted">دونده‌ها با دونده‌ها رقابت می‌کنند و دوچرخه‌سوارها با دوچرخه‌سوارها. هر کدام نقشه‌ی خودش را دارد، پس رقابت منصفانه است.</p>
+        <div class="modes">
+          <div class="mode-card">
+            <span class="mode-icon" aria-hidden="true">👟</span>
+            <h3>دویدن و پیاده‌روی</h3>
+            <p>کوچه‌به‌کوچه. حلقه‌های کوچک‌تر، نبردهای نزدیک‌تر.</p>
+          </div>
+          <div class="mode-card">
+            <span class="mode-icon" aria-hidden="true">🚲</span>
+            <h3>دوچرخه</h3>
+            <p>حلقه‌های بزرگ و محله‌های کامل در یک دور.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="wrap iran">
+        <p class="eyebrow">ساخته‌شده برای ایران</p>
+        <h2>نقشه‌ی خودمون.<br><span class="lime">زبان خودمون.</span></h2>
+        <div class="iran-grid">
+          <div><h3>نقشه‌ی کامل ایران</h3><p>از کلان‌شهر تا کوچه‌های شهر خودت، با نام فارسی خیابان‌ها.</p></div>
+          <div><h3>سرور داخل ایران</h3><p>نقشه و بازی از سرور داخل کشور بارگذاری می‌شوند؛ سریع و پایدار.</p></div>
+          <div><h3>بدون اپ‌استور</h3><p>مستقیم از مرورگر نصب می‌شود؛ روی آیفون و اندروید.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="install" class="section light">
+      <div class="wrap">
+        <h2 class="center">نصب روی گوشی در ۳۰ ثانیه</h2>
+        <div class="install">
+          <div class="install-card">
+            <h3>آیفون</h3>
+            <ol>
+              <li><b>bedoapp.com/app</b> را در <b>Safari</b> باز کن.</li>
+              <li>دکمه‌ی <b>اشتراک‌گذاری</b> (مربع با فلش) را بزن.</li>
+              <li><b>Add to Home Screen</b> را انتخاب کن.</li>
+            </ol>
+          </div>
+          <div class="install-card">
+            <h3>اندروید</h3>
+            <ol>
+              <li><b>bedoapp.com/app</b> را در <b>Chrome</b> باز کن.</li>
+              <li>منوی <b>سه‌نقطه</b> بالای صفحه را بزن.</li>
+              <li><b>Install app</b> یا <b>Add to Home screen</b> را بزن.</li>
+            </ol>
+          </div>
+        </div>
+        <p class="center"><a href="/app/" class="btn btn-dark">باز کردن بدو</a></p>
+      </div>
+    </section>
+
+    <section id="faq" class="section">
+      <div class="wrap faq">
+        <h2>سؤالات رایج</h2>
+        <details>
+          <summary>بدو رایگان است؟</summary>
+          <p>بله. ثبت‌نام و بازی رایگان است.</p>
+        </details>
+        <details>
+          <summary>بقیه مسیر و جای من را می‌بینند؟</summary>
+          <p>نه. بقیه فقط قلمروهایی را که تصرف کرده‌ای و نام کاربری‌ات را روی نقشه می‌بینند. مسیر دویدنت و موقعیت زنده‌ات به کسی نشان داده نمی‌شود.</p>
+        </details>
+        <details>
+          <summary>چرا قلمروی من کوچک‌تر شد؟</summary>
+          <p>یک نفر دیگر دور بخشی از زمینت حلقه زده و آن را گرفته است. در «آخرین نبردها» می‌بینی چه کسی بوده. برو پسش بگیر!</p>
+        </details>
+        <details>
+          <summary>اگر با ماشین یا موتور دور بزنم چه؟</summary>
+          <p>حساب نمی‌شود. فعالیت‌هایی که سرعتشان از سرعت دویدن یا دوچرخه‌سواری بیشتر باشد، رد می‌شوند.</p>
+        </details>
+        <details>
+          <summary>GPS کار نمی‌کند، چه کنم؟</summary>
+          <p>اجازه‌ی موقعیت مکانی را برای مرورگر روشن کن و بیرون از ساختمان امتحان کن. بدو نقطه‌های با دقت پایین را ثبت نمی‌کند تا بازی منصفانه بماند.</p>
+        </details>
+        <details>
+          <summary>در کدام شهرها می‌شود بازی کرد؟</summary>
+          <p>در تمام ایران. هر جا که بدوی، نقشه‌اش آماده است.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="final">
+      <div class="wrap final-inner">
+        <h2>زمین‌ها منتظرن.</h2>
+        <a href="/app/" class="btn btn-dark">همین الان شروع کن</a>
+      </div>
     </section>
   </main>
 
-  <nav class="tabbar">
-    <button data-view="me"><span class="tab-icon">◉</span><span>من</span></button>
-    <button data-view="play" class="active"><span class="tab-icon">◍</span><span>بازی</span></button>
-    <button data-view="ranks"><span class="tab-icon">♛</span><span>رتبه‌ها</span></button>
-  </nav>
-
-  <dialog id="auth-dialog" class="sheet-dialog">
-    <form id="auth-form" method="dialog">
-      <h2 id="auth-title" class="display">ورود</h2>
-      <label>نام کاربری<input name="username" autocomplete="username" required></label>
-      <label>رمز عبور<input name="password" type="password" autocomplete="current-password" required minlength="8"></label>
-      <p id="auth-error" class="error" hidden></p>
-      <button type="submit" class="btn btn-lime wide" id="auth-submit">ورود</button>
-      <button type="button" class="btn btn-ghost" id="auth-switch">حساب ندارید؟ ثبت‌نام</button>
-      <button type="button" class="btn btn-ghost" id="auth-close">بستن</button>
-    </form>
-  </dialog>
-
-  <dialog id="color-dialog" class="sheet-dialog">
-    <form method="dialog">
-      <h2 class="display">رنگت رو انتخاب کن</h2>
-      <p>قلمروی تو روی نقشه با این رنگ دیده می‌شود.</p>
-      <div id="color-grid" class="color-grid"></div>
-      <button class="btn btn-lime wide" id="color-done">ادامه</button>
-    </form>
-  </dialog>
-
-  <dialog id="intro-dialog" class="sheet-dialog">
-    <form method="dialog" id="intro-form">
-      <div id="intro-art" class="intro-art" aria-hidden="true"></div>
-      <h2 id="intro-title" class="display"></h2>
-      <p id="intro-text"></p>
-      <div class="dots" id="intro-dots"></div>
-      <div class="sheet-actions">
-        <button type="button" class="btn btn-ghost" id="intro-skip">رد شدن</button>
-        <button type="button" class="btn btn-lime" id="intro-next" autofocus>بعدی</button>
-      </div>
-    </form>
-  </dialog>
-
-  <script src="/vendor/maplibre/maplibre-gl.js"></script>
-  <script src="/vendor/pmtiles/pmtiles.js"></script>
-  <script src="/app.js"></script>
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <a href="/" class="logo">بدو</a>
+      <nav aria-label="پیوندهای پایین صفحه">
+        <a href="/app/">ورود به بازی</a>
+        <a href="#faq">سؤالات</a>
+        <a href="#install">نصب</a>
+      </nav>
+      <p class="fine">© ۱۴۰۵ بدو · داده‌ی نقشه: © <a href="https://www.openstreetmap.org/copyright">مشارکت‌کنندگان OpenStreetMap</a></p>
+    </div>
+  </footer>
 </body>
 </html>
