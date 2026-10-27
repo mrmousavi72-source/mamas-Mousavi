@@ -1,6 +1,6 @@
 // Caches the app shell so it opens without a network; API calls and map
 // tiles always go to the network.
-const CACHE = 'bedo-v4';
+const CACHE = 'bedo-v5';
 const SHELL = [
   '/',
   '/index.html',

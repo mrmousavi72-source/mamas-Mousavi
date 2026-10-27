@@ -289,16 +289,41 @@ function showMe(lngLat) {
   }
 }
 
+// Browsers only offer location on HTTPS (or localhost).
+function gpsAvailable() {
+  if (!window.isSecureContext) {
+    toast('موقعیت‌یابی فقط روی آدرس امن کار می‌کند. سایت را با https:// باز کنید.', { error: true, duration: 9000 });
+    return false;
+  }
+  if (!navigator.geolocation) {
+    toast('مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند.', { error: true });
+    return false;
+  }
+  return true;
+}
+
+function gpsError(err) {
+  const ios = /iPhone|iPad/.test(navigator.userAgent);
+  const messages = {
+    1: ios
+      ? 'دسترسی به موقعیت داده نشده.\nتنظیمات ← حریم خصوصی ← خدمات مکان‌یابی ← وب‌سایت‌های Safari را روی «هنگام استفاده» بگذارید، سپس صفحه را دوباره باز کنید.'
+      : 'دسترسی به موقعیت داده نشده. روی آیکن قفل کنار آدرس سایت بزنید، «مکان» را مجاز کنید و صفحه را دوباره باز کنید.',
+    2: 'موقعیت پیدا نشد. GPS (موقعیت مکانی) گوشی روشن است؟ بیرون از ساختمان امتحان کنید.',
+    3: 'سیگنال GPS دیر رسید. بیرون از ساختمان و زیر آسمان باز امتحان کنید.',
+  };
+  toast(messages[err.code] ?? 'موقعیت‌یابی کار نکرد.', { error: true, duration: 10000 });
+}
+
 $('locate-btn').addEventListener('click', () => {
-  if (!navigator.geolocation) return toast('مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند.', { error: true });
+  if (!gpsAvailable()) return;
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const lngLat = [pos.coords.longitude, pos.coords.latitude];
       showMe(lngLat);
       map.flyTo({ center: lngLat, zoom: 16 });
     },
-    () => toast('برای بازی، دسترسی به موقعیت مکانی را روشن کنید.', { error: true }),
-    { enableHighAccuracy: true, timeout: 15000 },
+    gpsError,
+    { enableHighAccuracy: true, timeout: 20000 },
   );
 });
 
@@ -375,6 +400,12 @@ function updateLiveStats() {
   if (rec.pausedAt) {
     status.textContent = '❚❚ متوقف شده';
     status.classList.add('paused');
+  } else if (rec.accuracy == null) {
+    status.textContent = '📡 در حال پیدا کردن GPS…';
+    status.classList.add('paused');
+  } else if (rec.accuracy > MAX_ACCURACY_METERS) {
+    status.textContent = `📡 سیگنال GPS ضعیف (دقت ${fa(Math.round(rec.accuracy))} متر)؛ به فضای باز برو`;
+    status.classList.add('paused');
   } else if (ready) {
     status.textContent = '✓ حلقه بسته شد؛ آماده‌ی تصرف';
     status.classList.add('ready');
@@ -411,11 +442,12 @@ function watchGps() {
     (pos) => {
       const lngLat = [pos.coords.longitude, pos.coords.latitude];
       showMe(lngLat);
-      if (pos.coords.accuracy > MAX_ACCURACY_METERS) return;
-      if (rec.points.length === 0) map.flyTo({ center: lngLat, zoom: 16 });
+      if (rec.accuracy == null) map.flyTo({ center: lngLat, zoom: 16 });
+      rec.accuracy = pos.coords.accuracy;
+      if (pos.coords.accuracy > MAX_ACCURACY_METERS) return updateLiveStats();
       addPoint({ lat: lngLat[1], lng: lngLat[0], t: pos.timestamp });
     },
-    () => toast('برای بازی، دسترسی به موقعیت مکانی را روشن کنید.', { error: true }),
+    gpsError,
     { enableHighAccuracy: true, maximumAge: 0 },
   );
   clearInterval(rec.timer);
@@ -434,8 +466,9 @@ function stopGps() {
 
 function startRecording(resumed = null) {
   if (!state.user) return openAuth();
-  if (!navigator.geolocation) return toast('مرورگر شما از موقعیت‌یابی پشتیبانی نمی‌کند.', { error: true });
+  if (!gpsAvailable()) return;
   state.recording = resumed ?? { points: [], startedAt: null, pausedAt: null, pausedMs: 0 };
+  state.recording.accuracy = null;
   drawTrack(state.recording.points);
   showPanel('live');
   updateLiveStats();
